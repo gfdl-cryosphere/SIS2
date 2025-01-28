@@ -140,6 +140,8 @@ type ice_data_type !  ice_public_type
                           !! mpp_parameter_mod.) Following SIS, this is BGRID_NE by default when the
                           !! sea ice is initialized, but here it is set to -999 so that a global max
                           !! across ice and non-ice processors can be used to determine its value.
+  real      :: IS_adot_int_land = 0. !< The total surface mass flux to the ice sheet,
+                          !! area-integrated over the land grid (kg s-1)
 
   ! The following are actually private to SIS2, and are not used elsewhere by other FMS modules.
   type(icebergs),    pointer :: icebergs => NULL()
@@ -258,6 +260,7 @@ subroutine ice_type_slow_reg_restarts(domain, CatIce, param_file, Ice, &
       call register_restart_field(Ice_restart, 'area_berg', Ice%area_berg, mandatory=.false.)
       call register_restart_field(Ice_restart, 'mass_berg', Ice%mass_berg, mandatory=.false.)
     endif
+    call register_restart_field(Ice_restart, 'IS_adot_int_land', Ice%IS_adot_int_land, mandatory=.true.)
   endif
 end subroutine ice_type_slow_reg_restarts
 

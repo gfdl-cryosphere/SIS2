@@ -113,8 +113,8 @@ type land_ice_boundary_type
                          !! of the frozen runoff, relative to liquid? (or frozen?) water
                          !! at 0 degC [W m-2].
   real, dimension(:,:),   pointer :: &
-    IS_adot_sg  =>NULL(), &    !< The mass flux over ice shelves [kg m-2 s-1].
-    IS_mask_sg  =>NULL()       !< The mask for ice shelves [kg m-2 s-1].
+    IS_adot_sg  =>NULL(), &    !< The mass flux over ice sheets [kg m-2 s-1].
+    IS_mask_sg  =>NULL()       !< The mask for ice sheets [kg m-2 s-1].
   real, dimension(:,:,:), pointer :: data => NULL() !< A collective field for "named" fields above
   integer   :: xtype     !< A flag indicating the exchange type, which may be set to
                          !! REGRID, REDIST or DIRECT and is used by coupler

@@ -425,7 +425,7 @@ subroutine unpack_land_ice_boundary(Ice, LIB)
   endif ; enddo ; enddo
 
   if (LIB%do_IS .and. ALLOCATED(FIA%adot)) then
-    if (root) write(outunit,*) 'ICE SHEET SURFACE FLUX EXCHANGE is enabled'
+    if (root .and. Ice%fCS%debug) write(outunit,*) 'ICE SHEET SURFACE FLUX EXCHANGE is enabled'
     do j=jsc,jec ; do i=isc,iec
       i2 = i+i_off ; j2 = j+j_off
       FIA%adot(i,j)  = US%kg_m2s_to_RZ_T * LIB%IS_adot_sg(i2,j2)
