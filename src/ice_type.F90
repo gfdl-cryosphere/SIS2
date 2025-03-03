@@ -167,7 +167,7 @@ contains
 !! predominantly associated with the slow processors, and register any variables
 !! in the ice data type that need to be included in the slow ice restart files.
 subroutine ice_type_slow_reg_restarts(domain, CatIce, param_file, Ice, &
-                                      Ice_restart, gas_fluxes)
+                                      Ice_restart, gas_fluxes, ice_sheet_enabled)
   type(domain2d),          intent(in)    :: domain   !< The ice models' FMS domain type
   integer,                 intent(in)    :: CatIce   !< The number of ice thickness categories
   type(param_file_type),   intent(in)    :: param_file !< A structure to parse for run-time parameters
@@ -177,10 +177,16 @@ subroutine ice_type_slow_reg_restarts(domain, CatIce, param_file, Ice, &
                  optional, intent(in)    :: gas_fluxes !< If present, this type describes the
                                               !! additional gas or other tracer fluxes between the
                                               !! ocean, ice, and atmosphere.
+  logical, optional, intent(in)          :: ice_sheet_enabled !< Enable ice sheet adot to be passed
 
   ! This subroutine allocates the externally visible ice_data_type's arrays and
   ! registers the appropriate ones for inclusion in the restart file.
   integer :: isc, iec, jsc, jec, km, idr
+
+  logical :: do_IS 
+
+  do_IS=.false.
+  if (present(ice_sheet_enabled)) do_IS=ice_sheet_enabled
 
   call get_domain_extent(domain, isc, iec, jsc, jec )
   km = CatIce + 1
@@ -202,7 +208,7 @@ subroutine ice_type_slow_reg_restarts(domain, CatIce, param_file, Ice, &
   call safe_alloc_ptr(Ice%p_surf, isc, iec, jsc, jec)
   call safe_alloc_ptr(Ice%runoff, isc, iec, jsc, jec)
   call safe_alloc_ptr(Ice%calving, isc, iec, jsc, jec)
-  call safe_alloc_ptr(Ice%adot, isc, iec, jsc, jec)
+  if (do_IS) call safe_alloc_ptr(Ice%adot, isc, iec, jsc, jec)
   call safe_alloc_ptr(Ice%runoff_hflx, isc, iec, jsc, jec)
   call safe_alloc_ptr(Ice%calving_hflx, isc, iec, jsc, jec)
   call safe_alloc_ptr(Ice%flux_salt, isc, iec, jsc, jec)
