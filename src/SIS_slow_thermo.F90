@@ -1460,7 +1460,7 @@ subroutine SIS_slow_thermo_init(Time, G, US, IG, param_file, diag, CS, tracer_fl
                  "is based on work by Torge Martin.", default=.false.)
   call get_param(param_file, mdl, "ICE_BULK_SALINITY", CS%ice_bulk_salin, &
                  "The fixed bulk salinity of sea ice.", &
-                 units="g/kg", default=4.0, scale=US%ppt_to_S)
+                 units="g kg-1", default=4.0, scale=US%ppt_to_S)
   call get_param(param_file, mdl, "ICE_RELATIVE_SALINITY", CS%ice_rel_salin, &
                  "The initial salinity of sea ice as a fraction of the "//&
                  "salinity of the seawater from which it formed.", &
@@ -1503,12 +1503,12 @@ subroutine SIS_slow_thermo_init(Time, G, US, IG, param_file, diag, CS, tracer_fl
                  "The rate of cooling of ice-free water that should be ice "//&
                  "covered in order to constrained the ice concentration to "//&
                  "track observations.  A suggested value is ~10000 W m-2.", &
-                 units = "W m-2", default=0.0, scale=US%W_m2_to_QRZ_T, &
+                 units="W m-2", default=0.0, scale=US%W_m2_to_QRZ_T, &
                  do_not_log=.not.CS%nudge_sea_ice)
   call get_param(param_file, mdl, "NUDGE_SEA_ICE_TOLERANCE", CS%nudge_conc_tol, &
                  "The tolerance for mismatch in the sea ice concentations "//&
                  "before nudging begins to be applied.  Values of order 0.1 "//&
-                 "should work well.", units = "nondim", default=0.0, &
+                 "should work well.", units="nondim", default=0.0, &
                  do_not_log=.not.CS%nudge_sea_ice)
   call get_param(param_file, mdl, "NUDGE_SEA_ICE_STABILITY", CS%nudge_stab_fac, &
                  "A factor that determines whether the buoyancy flux "//&
@@ -1592,28 +1592,27 @@ subroutine SIS_slow_thermo_init(Time, G, US, IG, param_file, diag, CS, tracer_fl
                'frozen water local sink', 'kg/(m^2*yr)', missing_value=missing)
   CS%id_bsnk = register_diag_field('ice_model','BSNK',diag%axesT1, Time, &
                'frozen water local bottom sink', &
-               'kg/(m^2*yr)', conversion= 864e2*365.*US%RZ_T_to_kg_m2s, &
-               missing_value=missing)
+               units='kg m-2 yr-1', conversion=864e2*365.*US%RZ_T_to_kg_m2s)
   CS%id_sn2ic = register_diag_field('ice_model','SN2IC'  ,diag%axesT1,Time, &
                'rate of snow to ice conversion', 'kg/(m^2*s)', missing_value=missing)
   CS%id_net_melt = register_diag_field('ice_model','net_melt' ,diag%axesT1, Time, &
                'net mass flux from ice & snow to ocean due to melting & freezing', &
-               'kg m-2 s-1', conversion=US%RZ_T_to_kg_m2s, missing_value=missing)
+               units='kg m-2 s-1', conversion=US%RZ_T_to_kg_m2s)
   CS%id_CMOR_melt = register_diag_field('ice_model','fsitherm' ,diag%axesT1, Time, &
                'water_flux_into_sea_water_due_to_sea_ice_thermodynamics', &
-               'kg m-2 s-1', conversion=US%RZ_T_to_kg_m2s, missing_value=missing)
+               units='kg m-2 s-1', conversion=US%RZ_T_to_kg_m2s)
 
   if (CS%do_ice_restore) then
     CS%id_qfres = register_diag_field('ice_model', 'QFLX_RESTORE_ICE', diag%axesT1, Time, &
-                 'Ice Restoring heat flux', 'W/m^2', conversion=US%QRZ_T_to_W_m2, missing_value=missing)
+                 'Ice Restoring heat flux', units='W m-2', conversion=US%QRZ_T_to_W_m2)
   endif
   if (CS%do_ice_limit) then
     CS%id_qflim = register_diag_field('ice_model', 'QFLX_LIMIT_ICE', diag%axesT1, Time, &
-                 'Ice Limit heat flux', 'W/m^2', conversion=US%QRZ_T_to_W_m2, missing_value=missing)
+                 'Ice Limit heat flux', units='W m-2', conversion=US%QRZ_T_to_W_m2)
   endif
   if (CS%nudge_sea_ice) then
     CS%id_fwnudge  = register_diag_field('ice_model','FW_NUDGE' ,diag%axesT1, Time, &
-               'nudging freshwater flux', 'kg/(m^2*s)', conversion=US%RZ_T_to_kg_m2s, missing_value=missing)
+               'nudging freshwater flux', units='kg m-2 s-1', conversion=US%RZ_T_to_kg_m2s)
   endif
 
   call SIS2_ice_thm_init(US, param_file, CS%ice_thm_CSp)
