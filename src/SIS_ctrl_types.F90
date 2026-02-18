@@ -241,6 +241,20 @@ subroutine ice_diagnostics_init(IOF, OSS, FIA, G, US, IG, diag, Time, Cgrid)
                'frozen runoff sensible heat flux', units='W m-2', conversion=US%QRZ_T_to_W_m2)
   FIA%id_evap     = register_SIS_diag_field('ice_model', 'EVAP',diag%axesT1, Time, &
                'evaporation', units='kg m-2 s-1', conversion=US%RZ_T_to_kg_m2s)
+  
+  !CMOR evaporation diagnostics
+  FIA%id_evap_i   = register_SIS_diag_field('ice_model', 'EVAPi', diag%axesT1, Time, &
+               'evaporation and sublimation of ice (negative corresponds to ice loss)', &
+               units='kg m-2 s-1', conversion=US%RZ_T_to_kg_m2s, &
+               cmor_field_name='sidmassevapsubl', &
+               cmor_standard_name='water_evapotranspiration_flux', &
+               cmor_long_name='Sea-Ice Mass Change Through Evaporation and Sublimation')
+  FIA%id_evap_s   = register_SIS_diag_field('ice_model', 'EVAPs', diag%axesT1, Time, &
+               'evaporation and sublimation of snow (negative corresponds to snow loss)', &
+               units='kg m-2 s-1', conversion=US%RZ_T_to_kg_m2s, &
+               cmor_field_name='sisndmasssubl', &
+               cmor_standard_name='tendency_of_atmosphere_mass_content_of_water_vapor_due_to_sublimation_of_surface_snow_and_ice', &
+               cmor_long_name='Snow Mass Rate of Change Through Evaporation or Sublimation')
   IOF%id_saltf    = register_SIS_diag_field('ice_model', 'SALTF', diag%axesT1, Time, &
                'ice to ocean salt flux', units='kg m-2 s-1', conversion=US%S_to_ppt*US%RZ_T_to_kg_m2s, &
                cmor_field_name='siflsaltbot', &
@@ -267,8 +281,8 @@ subroutine ice_diagnostics_init(IOF, OSS, FIA, G, US, IG, diag, Time, Cgrid)
                cmor_standard_name='surface_downwelling_shortwave_flux_in_air', &
                cmor_long_name='Downwelling Shortwave Flux over Sea Ice')
   FIA%id_albedo  = register_SIS_diag_field('ice_model', 'ALB', diag%axesT1, Time, &
-               'Shortwave flux weighted surface albedo, or 1 if no SW', &
-               units="nondim", range=(/0.,1./))
+               'Shortwave flux weighted surface albedo, or 1 if no SW [0,1]', &
+               units="nondim" )
   FIA%id_sw_vis   = register_SIS_diag_field('ice_model', 'SW_VIS', diag%axesT1, Time, &
                'visible shortwave heat flux', units='W m-2', conversion=US%QRZ_T_to_W_m2)
   FIA%id_sw_dir   = register_SIS_diag_field('ice_model', 'SW_DIR', diag%axesT1, Time, &
@@ -349,6 +363,13 @@ subroutine ice_diagnostics_init(IOF, OSS, FIA, G, US, IG, diag, Time, Cgrid)
 
   OSS%id_frazil   = register_SIS_diag_field('ice_model', 'FRAZIL', diag%axesT1, Time, &
                'energy flux of frazil formation', units='W m-2', conversion=US%QRZ_T_to_W_m2)
+  
+  OSS%id_frazilmass   = register_SIS_diag_field('ice_model', 'FRAZILMASS', diag%axesT1, Time, &
+               'mass flux of frazil formation', &
+               units='kg m-2 s-1', conversion=US%RZ_T_to_kg_m2s, &
+               cmor_field_name='sidmassgrowthwat', &
+               cmor_standard_name='tendency_of_sea_ice_amount_due_to_frazil_ice_accumulation_in_leads', &
+               cmor_long_name='Sea-Ice Mass Change Through Growth in Supercooled Open Water (Frazil)')
 
   if (coupler_type_initialized(OSS%tr_fields)) &
     call coupler_type_set_diags(OSS%tr_fields, 'ice_model', diag%axesT1%handles, Time)
@@ -422,43 +443,41 @@ subroutine ice_diags_fast_init(Rad, G, IG, diag, Time, component)
              cmor_long_name='Downwelling Longwave Flux over Sea Ice')
  
   Rad%id_alb      = register_SIS_diag_field(trim(comp_name), 'ALB', diag%axesT1, Time, &
-               'surface albedo', units="nondim", range=(/0.,1./) )
+               'surface albedo [0,1]', units="nondim" )
   Rad%id_coszen   = register_SIS_diag_field(trim(comp_name), 'coszen', diag%axesT1, Time, &
-               'cosine of the solar zenith angle for the next radiation step', &
-               units="nondim", range=(/-1.,1./) )
+               'cosine of the solar zenith angle for the next radiation step [-1,1]', &
+               units="nondim" )
   Rad%id_sw_abs_sfc= register_SIS_diag_field(trim(comp_name), 'sw_abs_sfc', diag%axesT1, Time, &
-               'SW frac. abs. at the ice surface', units="nondim", range=(/0.,1./) )
+               'SW frac. abs. at the ice surface [0,1]', units="nondim" )
   Rad%id_sw_abs_snow= register_SIS_diag_field(trim(comp_name), 'sw_abs_snow', diag%axesT1, Time, &
-               'SW frac. abs. in snow', units="nondim", range=(/0.,1./) )
+               'SW frac. abs. in snow [0,1]', units="nondim" )
 
   call safe_alloc_ids_1d(Rad%id_sw_abs_ice, nLay)
   do n=1,nLay
     write(nstr, '(I4)') n ; nstr = adjustl(nstr)
     Rad%id_sw_abs_ice(n) = register_SIS_diag_field(trim(comp_name),'sw_abs_ice'//trim(nstr), &
-                 diag%axesT1, Time, 'SW fraction absorbed in ice layer '//trim(nstr), &
-                 units="nondim", range=(/0.,1./) )
+                 diag%axesT1, Time, 'SW fraction absorbed in ice layer '//trim(nstr)//' [0,1]', &
+                 units="nondim" )
   enddo
   Rad%id_sw_pen= register_SIS_diag_field(trim(comp_name),'sw_pen', diag%axesT1, Time, &
-               'SW fraction penetrating the ice surface', &
-               units="nondim", range=(/0.,1./) )
+               'SW fraction penetrating the ice surface [0,1]', units="nondim" )
   Rad%id_sw_abs_ocn= register_SIS_diag_field(trim(comp_name),'sw_abs_ocn', diag%axesT1, Time, &
-               'SW fraction sent to the ocean', units="nondim", range=(/0.,1./) )
-
+               'SW fraction sent to the ocean [0,1]', units="nondim" )
 
   Rad%id_alb_vis_dir = register_SIS_diag_field(trim(comp_name), 'alb_vis_dir', diag%axesT1, Time, &
-               'ice surface albedo vis_dir', units="nondim", range=(/0.,1./) )
+               'ice surface albedo vis_dir [0,1]', units="nondim" )
   Rad%id_alb_vis_dif = register_SIS_diag_field(trim(comp_name), 'alb_vis_dif', diag%axesT1, Time, &
-               'ice surface albedo vis_dif', units="nondim", range=(/0.,1./) )
+               'ice surface albedo vis_dif [0,1]', units="nondim" )
   Rad%id_alb_nir_dir = register_SIS_diag_field(trim(comp_name), 'alb_nir_dir', diag%axesT1, Time, &
-               'ice surface albedo nir_dir', units="nondim", range=(/0.,1./) )
+               'ice surface albedo nir_dir [0,1]', units="nondim" )
   Rad%id_alb_nir_dif = register_SIS_diag_field(trim(comp_name), 'alb_nir_dif', diag%axesT1, Time, &
-               'ice surface albedo nir_dif', units="nondim", range=(/0.,1./) )
+               'ice surface albedo nir_dif [0,1]', units="nondim" )
   Rad%id_tskin = register_SIS_diag_field(trim(comp_name),'Tskin', diag%axesTc, Time, &
                'Skin temperature', units='degC', conversion=G%US%C_to_degC)
   Rad%id_cn = register_SIS_diag_field(trim(comp_name),'CN_fast', diag%axesTc, Time, &
-               'Category concentration', units="nondim", range=(/0.,1./) )
+               'Category concentration [0,1]', units="nondim" )
   Rad%id_mi = register_SIS_diag_field(trim(comp_name),'MI_fast', diag%axesTc, Time, &
-               'Category concentration', units="nondim", range=(/0.,1./) )
+               'Category concentration [0,1]', units="nondim" )
 
 end subroutine ice_diags_fast_init
 

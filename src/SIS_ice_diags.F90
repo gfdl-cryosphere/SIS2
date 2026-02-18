@@ -238,7 +238,7 @@ subroutine post_ice_state_diagnostics(IDs, IST, OSS, IOF, dt_slow, Time, G, US, 
 
   ! Write out diagnostics of the ocean surface state, as seen by the slow sea ice.
   ! These fields do not change over the course of the sea-ice time stepping.
-  call post_ocean_sfc_diagnostics(OSS, dt_slow, Time, G, diag)
+  call post_ocean_sfc_diagnostics(OSS, dt_slow, Time, G, diag, IST)
 
   if (IDs%id_e2m>0) then
     tmp2d(:,:) = 0.0
@@ -280,15 +280,18 @@ end subroutine post_ice_state_diagnostics
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~!
 !> Offer diagnostics of the ocean surface field, as seen by the sea ice.
-subroutine post_ocean_sfc_diagnostics(OSS, dt_slow, Time, G, diag)
+subroutine post_ocean_sfc_diagnostics(OSS, dt_slow, Time, G, diag, IST)
   type(ocean_sfc_state_type), intent(in)    :: OSS  !< A structure containing the arrays that describe
                                                     !! the ocean's surface state for the ice model.
   real,                       intent(in)    :: dt_slow  !< The time interval of these diagnostics [T ~> s]
   type(time_type),            intent(in)    :: Time     !< The ending time of these diagnostics
   type(SIS_hor_grid_type),    intent(inout) :: G    !< The horizontal grid type
   type(SIS_diag_ctrl),        pointer       :: diag !< A structure that is used to regulate diagnostic output
+  type(ice_state_type),       optional,intent(in) :: IST !< A type describing the state of the sea ice
 
-  real :: Idt_slow ! The inverse of the thermodynamic step [T-1 ~> s-1].
+  real :: Idt_slow  ! The inverse of the thermodynamic step [T-1 ~> s-1].
+  real :: LatHtFus  ! The latent heat of fusion of ice [Q ~> J kg-1].
+  real :: ILatHtFus_s ! The inverse of latent heat of fusion of ice, per second [Q-1 ~> kg J-1 s-1].
   Idt_slow = 0.0 ; if (dt_slow > 0.0) Idt_slow = 1.0/dt_slow
 
   ! Write out diagnostics of the ocean surface state, as seen by the slow sea ice.
@@ -305,6 +308,11 @@ subroutine post_ocean_sfc_diagnostics(OSS, dt_slow, Time, G, diag)
   endif
   if (OSS%id_frazil>0) &
     call post_data(OSS%id_frazil, OSS%frazil*Idt_slow, diag)
+  if (OSS%id_frazilmass>0) then
+    call get_SIS2_thermo_coefs(IST%ITV, Latent_fusion=LatHtFus)
+    ILatHtFus_s = 1.0 / (LatHtFus * dt_slow)
+    call post_data(OSS%id_frazilmass, OSS%frazil*ILatHtFus_s, diag)
+  endif
 
   if (coupler_type_initialized(OSS%tr_fields)) &
     call coupler_type_send_data(OSS%tr_fields, Time)
@@ -343,7 +351,7 @@ subroutine register_ice_state_diagnostics(Time, IG, US, param_file, diag, IDs)
                'ice extent, indicating cells with more than 15% sea ice cover', &
                units='nondim')
   IDs%id_cn       = register_diag_field('ice_model', 'CN', diag%axesTc, Time, &
-               'ice concentration', units="nondim", range=(/0.,1./), &
+               'ice concentration [0,1]', units="nondim", &
                cmor_field_name='siitdconc', &
                cmor_standard_name='sea_ice_area_fraction', &
                cmor_long_name='Sea-Ice Area Percentages in Ice Thickness Categories')
@@ -356,9 +364,9 @@ subroutine register_ice_state_diagnostics(Time, IG, US, param_file, diag, IDs)
   IDs%id_hi       = register_diag_field('ice_model', 'HI', diag%axesT1, Time, &
                'ice thickness', units='m', conversion=US%Z_to_m)
   IDs%id_sitimefrac = register_diag_field('ice_model', 'sitimefrac', diag%axesT1, Time, &
-               'time fraction of ice cover', units="nondim", range=(/0.,1./) )
+               'time fraction of ice cover [0,1]', units="nondim" )
   IDs%id_siconc = register_diag_field('ice_model', 'siconc', diag%axesT1, Time, &
-               'ice concentration', units="nondim", range=(/0.,1./) )
+               'ice concentration [0,1]', units="nondim" )
   IDs%id_siconc_CMOR = register_diag_field('ice_model', 'siconc_CMOR', diag%axesT1, Time, &
                'Sea-Ice Area Percentage', units='%', conversion=100.0, &
                standard_name="SeaIceAreaFraction")
@@ -367,7 +375,7 @@ subroutine register_ice_state_diagnostics(Time, IG, US, param_file, diag, IDs)
   IDs%id_sivol  = register_diag_field('ice_model', 'sivol', diag%axesT1, Time, &
                'ice volume', units='m', conversion=US%Z_to_m)
   IDs%id_sisnconc = register_diag_field('ice_model', 'sisnconc', diag%axesT1, Time, &
-               'snow concentration', units="nondim", range=(/0.,1./) )
+               'snow concentration [0,1]', units="nondim" )
   IDs%id_sisnconc_CMOR = register_diag_field('ice_model', 'sisnconc_CMOR', diag%axesT1, Time, &
                'Snow Area Percentage', units='%', conversion=100.0, missing_value=missing, &
                standard_name="SurfaceSnowAreaFraction")
@@ -413,7 +421,7 @@ subroutine register_ice_state_diagnostics(Time, IG, US, param_file, diag, IDs)
                  "If true, call the ridging routines.", default=.false., do_not_log=.true.)
   if (do_ridging) then
     IDs%id_rdgf = register_diag_field('ice_model', 'RDG_FRAC', diag%axesTc, Time, &
-                   'ridged ice fraction', units="nondim", range=(/0.,1./) )
+                   'ridged ice fraction [0,1]', units="nondim" )
 !   IDs%id_rdg_h = register_diag_field('ice_model', 'RDG_HEIGHT', diag%axesTc, Time, &
 !                  'ice ridge height', units='m', conversion=US%m_to_Z)
   endif
