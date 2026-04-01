@@ -307,6 +307,7 @@ subroutine update_ice_dynamics_trans(Ice, time_step, start_cycle, end_cycle, cyc
     call pass_var(sIST%part_size, sG%Domain)
     call pass_var(sIST%mH_ice, sG%Domain, complete=.false.)
     call pass_var(sIST%mH_pond, sG%Domain, complete=.false.)
+    call pass_var(sIST%mH_pond_ice, sG%Domain, complete=.false.)
     call pass_var(sIST%mH_snow, sG%Domain, complete=.true.)
   endif
 
@@ -472,8 +473,6 @@ subroutine unpack_ocean_ice_boundary_calved_shelf_bergs(Ice, OIB)
   !$OMP                          private(i2,j2)
   do j=jsc,jec ; do i=isc,iec ; if (G%mask2dT(i,j) > 0.0) then
     i2 = i+i_off ; j2 = j+j_off
-    !if (FIA%calving(i,j)>0.0 .and. OIB%calving(i2,j2)>0.0) &
-    !        call SIS_error(FATAL,"Overlap in calving from snow discharge and ice shelf!")
     FIA%calving(i,j) = FIA%calving(i,j) + US%kg_m2s_to_RZ_T*OIB%calving(i2,j2)
     FIA%calving_hflx(i,j) = FIA%calving_hflx(i,j) + US%W_m2_to_QRZ_T*OIB%calving_hflx(i2,j2)
   endif ; enddo ; enddo
@@ -637,7 +636,8 @@ subroutine set_ocean_top_fluxes(Ice, IST, IOF, FIA, OSS, G, US, IG, sCS)
 !  do j=jsc,jec ; do k=1,ncat ; do i=isc,iec
 !    i2 = i+i_off ; j2 = j+j_off! Use these to correct for indexing differences.
 !    Ice%mi(i2,j2) = Ice%mi(i2,j2) + IST%part_size(i,j,k) * &
-!        (G%US%RZ_to_kg_m2 * ((IST%mH_snow(i,j,k) + IST%mH_pond(i,j,k)) + IST%mH_ice(i,j,k)))
+!        (G%US%RZ_to_kg_m2 * ((IST%mH_snow(i,j,k) + IST%mH_pond(i,j,k)) + &
+!         (IST%mH_pond_ice(i,j,k) + IST%mH_ice(i,j,k))))
 !  enddo ; enddo ; enddo
 
   ! This block of code is probably unnecessary.
@@ -726,7 +726,7 @@ subroutine ice_mass_from_IST(IST, IOF, G, IG)
   !$OMP parallel do default(shared)
   do j=jsc,jec ; do k=1,ncat ; do i=isc,iec
     IOF%mass_ice_sn_p(i,j) = IOF%mass_ice_sn_p(i,j) + IST%part_size(i,j,k) * &
-          ((IST%mH_snow(i,j,k) + IST%mH_pond(i,j,k)) + IST%mH_ice(i,j,k))
+          ((IST%mH_snow(i,j,k) + IST%mH_pond(i,j,k)) + (IST%mH_pond_ice(i,j,k) + IST%mH_ice(i,j,k)))
   enddo ; enddo ; enddo
 
 end subroutine ice_mass_from_IST
@@ -1795,10 +1795,11 @@ subroutine ice_model_init(Ice, Time_Init, Time, Time_step_fast, Time_step_slow, 
   logical :: redo_fast_update ! If true, recalculate the thermal updates from the fast
                               ! dynamics on the slowly evolving ice state, rather than
                               ! copying over the slow ice state to the fast ice state.
-  logical :: do_mask_restart  ! If true, apply the scaling and masks to mH_snow, mH_ice, part_size
-                              ! mH_pond, t_surf, t_skin, sal_ice, enth_ice and enth_snow
-                              ! after a restart. However this may cause answers to diverge
-                              ! after a restart.Provide a switch to turn this option off.
+  logical :: do_mask_restart  ! If true, apply the scaling and masks to mH_snow, mH_ice,
+                              ! part_size, mH_pond, mH_pond_ice, t_surf, t_skin, sal_ice,
+                              ! enth_ice and enth_snow after a restart. However this may
+                              ! cause answers to diverge after a restart. Provide a switch
+                              ! to turn this option off.
   logical :: recategorize_ice ! If true, adjust the distribution of the ice among thickness
                               ! categories after initialization.
   logical :: do_brine_plume   ! If true, keep track of how much salt is left in the ocean
@@ -2512,6 +2513,7 @@ subroutine ice_model_init(Ice, Time_Init, Time, Time_step_fast, Time_step_slow, 
         sIST%enth_snow(i,j,k,1) = sIST%enth_snow(i,j,k,1) * sG%mask2dT(i,j)
         sIST%mH_ice(i,j,k) = sIST%mH_ice(i,j,k) * sG%mask2dT(i,j)
         sIST%mH_pond(i,j,k) = sIST%mH_pond(i,j,k) * sG%mask2dT(i,j)
+        sIST%mH_pond_ice(i,j,k) = sIST%mH_pond_ice(i,j,k) * sG%mask2dT(i,j)
         sIST%part_size(i,j,k) = sIST%part_size(i,j,k) * sG%mask2dT(i,j)
       enddo ; enddo ; enddo
       ! Since we masked out the part_size on land we should set
@@ -2524,7 +2526,7 @@ subroutine ice_model_init(Ice, Time_Init, Time, Time_step_fast, Time_step_slow, 
     if (recategorize_ice) then
       ! Transfer ice to the correct thickness categories.  This does not change the thicknesses or
       ! other properties where the ice is already in the correct categories.
-      call adjust_ice_categories(sIST%mH_ice, sIST%mH_snow, sIST%mH_pond, sIST%part_size, &
+      call adjust_ice_categories(sIST%mH_ice, sIST%mH_snow, sIST%mH_pond, sIST%mH_pond_ice, sIST%part_size, &
                             sIST%TrReg, sG, sIG, SIS_dyn_trans_transport_CS(Ice%sCS%dyn_trans_CSp))
     endif
 
@@ -2537,6 +2539,7 @@ subroutine ice_model_init(Ice, Time_Init, Time, Time_step_fast, Time_step_slow, 
     call pass_var(sIST%mH_ice, sGD, complete=.false.)
     call pass_var(sIST%mH_snow, sGD, complete=.false.)
     call pass_var(sIST%mH_pond, sGD, complete=.false.)
+    call pass_var(sIST%mH_pond_ice, sGD, complete=.false.)
     do l=1,NkIce
       call pass_var(sIST%enth_ice(:,:,:,l), sGD, complete=.false.)
     enddo
