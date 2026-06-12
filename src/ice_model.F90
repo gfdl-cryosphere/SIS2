@@ -29,6 +29,7 @@ use MOM_domains,       only : pass_var, pass_vector, AGRID, BGRID_NE, CGRID_NE
 use MOM_domains,       only : fill_symmetric_edges, MOM_domains_init, clone_MOM_domain
 use MOM_dyn_horgrid,   only : dyn_horgrid_type, create_dyn_horgrid, destroy_dyn_horgrid
 use MOM_error_handler, only : SIS_error=>MOM_error, FATAL, WARNING, SIS_mesg=>MOM_mesg
+use MOM_error_handler, only : SIS_set_verbosity=>MOM_set_verbosity
 use MOM_error_handler, only : callTree_enter, callTree_leave, callTree_waypoint
 use MOM_file_parser,   only : get_param, log_param, log_version, read_param, param_file_type
 use MOM_file_parser,   only : open_param_file, close_param_file
@@ -437,6 +438,19 @@ subroutine unpack_land_ice_boundary(Ice, LIB)
     enddo ; enddo
   endif
 
+  if (associated(LIB%runoff_carbon) .and. allocated(FIA%runoff_carbon)) then
+    do j=jsc,jec ; do i=isc,iec ; if (G%mask2dT(i,j) > 0.0) then
+      i2 = i+i_off ; j2 = j+j_off
+      FIA%runoff_carbon(i,j)  = US%kg_m2s_to_RZ_T*LIB%runoff_carbon(i2,j2)
+    else
+      ! This is a land point from the perspective of the sea-ice.
+      ! At some point it might make sense to check for non-zero fluxes, which
+      ! might indicate regridding errors.  However, bad-data values are also
+      ! non-zero and should not be flagged.
+        FIA%runoff_carbon(i,j)  = 0.0
+    endif ; enddo ; enddo
+  endif
+
   if (Ice%fCS%debug) then
     call FIA_chksum("End of unpack_land_ice_boundary", FIA, G, Ice%fCS%US)
   endif
@@ -697,7 +711,12 @@ subroutine set_ocean_top_fluxes(Ice, IST, IOF, FIA, OSS, G, US, IG, sCS)
       Ice%salt_left_behind(i2,j2) = US%RZ_T_to_kg_m2s*IOF%salt_left_behind(i,j)
     enddo ; enddo
   endif
-
+  if (allocated(FIA%runoff_carbon) .and. associated(Ice%runoff_carbon)) then
+    do j=jsc,jec ; do i=isc,iec
+      i2 = i+i_off ; j2 = j+j_off! Use these to correct for indexing differences.
+      Ice%runoff_carbon(i2,j2)  = US%RZ_T_to_kg_m2s*FIA%runoff_carbon(i,j)
+    enddo ; enddo
+  endif
   ! This copy may need to be skipped in the first step of a cold-start run with lagged ice
   ! coupling, but otherwise if it is skipped may indicate a problem that should be trapped.
   if (coupler_type_initialized(IOF%tr_flux_ocn_top)) &
@@ -1757,6 +1776,8 @@ subroutine ice_model_init(Ice, Time_Init, Time, Time_step_fast, Time_step_slow, 
                          ! answers at roundoff.
 
   integer :: CatIce, NkIce, isd, ied, jsd, jed
+  integer :: verbosity      ! The verbosity setting for the sea-ice (1-10).  When the sea-ice and
+                            ! ocean are on the same PEs, the ocean's setting takes precedence.
   integer :: write_geom     ! A flag indicating whether to write the grid geometry files only for
                             ! new runs (1), both new runs and restarts (2) or neither (0).
   logical :: nudge_sea_ice  ! If true, nudge sea ice concentrations towards observations.
@@ -1806,6 +1827,8 @@ subroutine ice_model_init(Ice, Time_Init, Time, Time_step_fast, Time_step_slow, 
                               ! during ice formation.
   logical :: read_hlim_vals   ! If true, read the list of ice thickness lower limits
                               ! from an input file.
+  logical :: allow_carbon_flux_exchange ! If true, allow carbon fluxes between the ocean, ice, and atmosphere.
+
   real,  allocatable, dimension(:) :: &
     hlim_vals                 ! List of lower limits on ice thickness categories.
   logical :: Verona
@@ -1841,10 +1864,18 @@ subroutine ice_model_init(Ice, Time_Init, Time, Time_step_fast, Time_step_slow, 
     call Get_SIS_Input(param_file, dirs, check_params=.false., component='SIS_fast')
   endif
 
+  verbosity = 2 ; call read_param(param_file, "VERBOSITY", verbosity)
+  call SIS_set_verbosity(verbosity)
   call callTree_enter("ice_model_init(), ice_model.F90")
 
   ! Read all relevant parameters and write them to the model log.
-  call log_version(param_file, mdl, version, "")
+  call log_version(param_file, mdl, version, "", log_to_all=.true., layout=.true., debugging=.true.)
+  call get_param(param_file, mdl, "VERBOSITY", verbosity,  &
+                 "Integer controlling level of messaging\n" // &
+                 "\t0 = Only FATAL messages\n" // &
+                 "\t2 = Only FATAL, WARNING, NOTE [default]\n" // &
+                 "\t6 = Above plus call tree messages\n" //&
+                 "\t9 = All)", default=2, debuggingParam=.true.)
 
   ! Determining the internal unit scaling factors for this run.
   call unit_scaling_init(param_file, US)
@@ -2045,6 +2076,9 @@ subroutine ice_model_init(Ice, Time_Init, Time, Time_step_fast, Time_step_slow, 
   call get_param(param_file, mdl, "READ_HLIM_VALS", read_hlim_vals, &
                  "If true, read the lower limits on the ice thickness"//&
                  "categories.", default=.false.)
+  call get_param(param_file, mdl, "ALLOW_CARBON_FLUX_EXCHANGE", allow_carbon_flux_exchange, &
+                 "If true, allow carbon flux exchange between ice, ocean, and atmosphere.", &
+                 default=.false.)
 
   nCat_dflt = 5 ; if (slab_ice) nCat_dflt = 1
   opm_dflt = 0.0 ; if (redo_fast_update) opm_dflt = 1.0e-40
@@ -2157,7 +2191,7 @@ subroutine ice_model_init(Ice, Time_Init, Time, Time_step_fast, Time_step_slow, 
   ! Allocate and register fields for restarts.
 
     call ice_type_slow_reg_restarts(sGD%mpp_domain, CatIce, &
-                      param_file, Ice, Ice%Ice_restart, ice_sheet_enabled=do_IS)
+                      param_file, Ice, Ice%Ice_restart, ice_sheet_enabled=do_IS, carbon_fluxes=allow_carbon_flux_exchange)
 
     call alloc_IST_arrays(sHI, sIG, US, sIST, omit_tsurf=Eulerian_tsurf, do_ridging=do_ridging)
     call ice_state_register_restarts(sIST, sG, sIG, US, Ice%Ice_restart)
@@ -2172,7 +2206,7 @@ subroutine ice_model_init(Ice, Time_Init, Time, Time_step_fast, Time_step_slow, 
                               do_brine_plume=Ice%sCS%do_brine_plume)
     Ice%sCS%IOF%slp2ocean = slp2ocean
     Ice%sCS%IOF%flux_uv_stagger = Ice%flux_uv_stagger
-    call alloc_fast_ice_avg(Ice%sCS%FIA, sHI, sIG, interp_fluxes, gas_fluxes, ice_sheet_enabled=do_IS)
+    call alloc_fast_ice_avg(Ice%sCS%FIA, sHI, sIG, interp_fluxes, gas_fluxes, allow_carbon_flux_exchange, ice_sheet_enabled=do_IS)
 
     if (Ice%sCS%redo_fast_update) then
       call alloc_total_sfc_flux(Ice%sCS%TSF, sHI, gas_fluxes)
@@ -2327,7 +2361,7 @@ subroutine ice_model_init(Ice, Time_Init, Time, Time_step_fast, Time_step_slow, 
                             omit_velocities=.true., omit_tsurf=Eulerian_tsurf)
     endif
     if (.not.single_IST) then
-      call alloc_fast_ice_avg(Ice%fCS%FIA, fHI, Ice%fCS%IG, interp_fluxes, gas_fluxes, ice_sheet_enabled=do_IS)
+      call alloc_fast_ice_avg(Ice%fCS%FIA, fHI, Ice%fCS%IG, interp_fluxes, gas_fluxes, allow_carbon_flux_exchange, ice_sheet_enabled=do_IS)
 
       call alloc_simple_OSS(Ice%fCS%sOSS, fHI, gas_fields_ocn)
     endif

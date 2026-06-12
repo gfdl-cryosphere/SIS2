@@ -103,6 +103,7 @@ type ice_data_type !  ice_public_type
     p_surf => NULL(), &   !< The pressure at the ocean surface [Pa].  This may
                           !! or may not include atmospheric pressure.
     runoff => NULL(), &   !< Liquid runoff into the ocean [kg m-2].
+    runoff_carbon => NULL(), &   !< Carbon content of liquid runoff into the ocean [kg m-2].
     calving => NULL(), &  !< Calving of ice or runoff of frozen fresh water into
                           !! the ocean [kg m-2].
     adot => NULL(), &  !< Surface mass flux to ice shelf top [kg m-2]
@@ -171,7 +172,11 @@ contains
 !! predominantly associated with the slow processors, and register any variables
 !! in the ice data type that need to be included in the slow ice restart files.
 subroutine ice_type_slow_reg_restarts(domain, CatIce, param_file, Ice, &
+<<<<<<< HEAD
                                       Ice_restart, gas_fluxes, ice_sheet_enabled)
+=======
+                                      Ice_restart, gas_fluxes, carbon_fluxes)
+>>>>>>> gfdl/dev/gfdl
   type(domain2d),          intent(in)    :: domain   !< The ice models' FMS domain type
   integer,                 intent(in)    :: CatIce   !< The number of ice thickness categories
   type(param_file_type),   intent(in)    :: param_file !< A structure to parse for run-time parameters
@@ -181,7 +186,11 @@ subroutine ice_type_slow_reg_restarts(domain, CatIce, param_file, Ice, &
                  optional, intent(in)    :: gas_fluxes !< If present, this type describes the
                                               !! additional gas or other tracer fluxes between the
                                               !! ocean, ice, and atmosphere.
+<<<<<<< HEAD
   logical, optional, intent(in)          :: ice_sheet_enabled !< Enable ice sheet adot to be passed
+=======
+  logical,       optional, intent(in)    :: carbon_fluxes !< If true, allocate fields for carbon fluxes.
+>>>>>>> gfdl/dev/gfdl
 
   ! This subroutine allocates the externally visible ice_data_type's arrays and
   ! registers the appropriate ones for inclusion in the restart file.
@@ -211,6 +220,9 @@ subroutine ice_type_slow_reg_restarts(domain, CatIce, param_file, Ice, &
   call safe_alloc_ptr(Ice%fprec, isc, iec, jsc, jec)
   call safe_alloc_ptr(Ice%p_surf, isc, iec, jsc, jec)
   call safe_alloc_ptr(Ice%runoff, isc, iec, jsc, jec)
+  if (present(carbon_fluxes)) then
+    if (carbon_fluxes) call safe_alloc_ptr(Ice%runoff_carbon, isc, iec, jsc, jec)
+  endif
   call safe_alloc_ptr(Ice%calving, isc, iec, jsc, jec)
   if (do_IS) call safe_alloc_ptr(Ice%adot, isc, iec, jsc, jec)
   call safe_alloc_ptr(Ice%runoff_hflx, isc, iec, jsc, jec)
@@ -259,6 +271,9 @@ subroutine ice_type_slow_reg_restarts(domain, CatIce, param_file, Ice, &
     call register_restart_field(Ice_restart, 'flux_sw_vis_dif', Ice%flux_sw_vis_dif)
     call register_restart_field(Ice_restart, 'flux_sw_nir_dir', Ice%flux_sw_nir_dir)
     call register_restart_field(Ice_restart, 'flux_sw_nir_dif', Ice%flux_sw_nir_dif)
+    if (associated(Ice%runoff_carbon)) then
+      call register_restart_field(Ice_restart, 'runoff_carbon',   Ice%runoff_carbon, mandatory=.false.)
+    endif
     if (Ice%sCS%pass_stress_mag) &
       call register_restart_field(Ice_restart, 'stress_mag', Ice%stress_mag, mandatory=.false.)
     if (Ice%sCS%pass_iceberg_area_to_ocean) then
@@ -358,6 +373,7 @@ subroutine dealloc_Ice_arrays(Ice)
   if (associated(Ice%fprec)) deallocate(Ice%fprec)
   if (associated(Ice%p_surf)) deallocate(Ice%p_surf)
   if (associated(Ice%runoff)) deallocate(Ice%runoff)
+  if (associated(Ice%runoff_carbon)) deallocate(Ice%runoff_carbon)
   if (associated(Ice%calving)) deallocate(Ice%calving)
   if (associated(Ice%adot)) deallocate(Ice%adot)
   if (associated(Ice%runoff_hflx)) deallocate(Ice%runoff_hflx)
@@ -442,6 +458,7 @@ subroutine Ice_public_type_chksum(mesg, Ice, check_fast, check_slow, check_rough
     call chksum(Ice%calving, trim(mesg)//" Ice%calving")
     if (associated(Ice%adot)) call chksum(Ice%adot, trim(mesg)//" Ice%adot")
     call chksum(Ice%runoff, trim(mesg)//" Ice%runoff")
+    if (associated(Ice%runoff_carbon)) call chksum(Ice%runoff_carbon, trim(mesg)//" Ice%runoff_carbon")
     if (associated(Ice%sCS)) then ; if (Ice%sCS%pass_stress_mag) then
       call chksum(Ice%stress_mag, trim(mesg)//" Ice%stress_mag")
     endif ; endif
@@ -702,6 +719,9 @@ subroutine ice_data_type_chksum(mesg, timestep, Ice, init_call)
     chks = SIS_chksum(Ice%fprec           ) ; if (root) write(outunit,100) 'ice_data_type%fprec           ', chks
     chks = SIS_chksum(Ice%p_surf          ) ; if (root) write(outunit,100) 'ice_data_type%p_surf          ', chks
     chks = SIS_chksum(Ice%runoff          ) ; if (root) write(outunit,100) 'ice_data_type%runoff          ', chks
+    if (associated(Ice%runoff_carbon)) then
+      chks = SIS_chksum(Ice%runoff_carbon   ) ; if (root) write(outunit,100) 'ice_data_type%runoff_carbon   ', chks
+    endif
     chks = SIS_chksum(Ice%calving         ) ; if (root) write(outunit,100) 'ice_data_type%calving         ', chks
     if (associated(Ice%adot)) chks = SIS_chksum(Ice%adot         ) ; if (root) write(outunit,100) 'ice_data_type%adot         ', chks
     chks = SIS_chksum(Ice%flux_salt       ) ; if (root) write(outunit,100) 'ice_data_type%flux_salt       ', chks
