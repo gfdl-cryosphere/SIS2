@@ -172,11 +172,7 @@ contains
 !! predominantly associated with the slow processors, and register any variables
 !! in the ice data type that need to be included in the slow ice restart files.
 subroutine ice_type_slow_reg_restarts(domain, CatIce, param_file, Ice, &
-<<<<<<< HEAD
-                                      Ice_restart, gas_fluxes, ice_sheet_enabled)
-=======
-                                      Ice_restart, gas_fluxes, carbon_fluxes)
->>>>>>> gfdl/dev/gfdl
+                                      Ice_restart, gas_fluxes, ice_sheet_enabled, carbon_fluxes)
   type(domain2d),          intent(in)    :: domain   !< The ice models' FMS domain type
   integer,                 intent(in)    :: CatIce   !< The number of ice thickness categories
   type(param_file_type),   intent(in)    :: param_file !< A structure to parse for run-time parameters
@@ -186,17 +182,14 @@ subroutine ice_type_slow_reg_restarts(domain, CatIce, param_file, Ice, &
                  optional, intent(in)    :: gas_fluxes !< If present, this type describes the
                                               !! additional gas or other tracer fluxes between the
                                               !! ocean, ice, and atmosphere.
-<<<<<<< HEAD
   logical, optional, intent(in)          :: ice_sheet_enabled !< Enable ice sheet adot to be passed
-=======
   logical,       optional, intent(in)    :: carbon_fluxes !< If true, allocate fields for carbon fluxes.
->>>>>>> gfdl/dev/gfdl
 
   ! This subroutine allocates the externally visible ice_data_type's arrays and
   ! registers the appropriate ones for inclusion in the restart file.
   integer :: isc, iec, jsc, jec, km, idr
 
-  logical :: do_IS 
+  logical :: do_IS
 
   do_IS=.false.
   if (present(ice_sheet_enabled)) do_IS=ice_sheet_enabled
